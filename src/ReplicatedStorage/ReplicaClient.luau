@@ -68,6 +68,7 @@ MAD STUDIO
 ----- Dependencies -----
 
 local ReplicaShared = game.ReplicatedStorage.ReplicaShared
+local Sera = require(game.ReplicatedStorage.Sera
 local Remote = require(ReplicaShared.Remote)
 local Signal = require(ReplicaShared.Signal)
 local Maid = require(ReplicaShared.Maid)
@@ -105,42 +106,57 @@ local RemoteCreate = Remote.New("ReplicaCreate")           -- (creation, root_id
 local RemoteBind = Remote.New("ReplicaBind")               -- (replica_id)
 local RemoteDestroy = Remote.New("ReplicaDestroy")         -- (replica_id)
 local RemoteSignalUnreliable = Remote.New("ReplicaSignalUnreliable", true)   -- (replica_id, ...)
+local RemoteWriteSchema = Remote.New("ReplicaWriteSchema")
 
 local WriteLibCache: {[ModuleScript]: {[string | number]: {Name: string, Id: number, fn: (...any) -> (...any)}}} = {}
 local ReplicationFlag = false
 
 local function LoadWriteLib(module: ModuleScript)
-
 	local write_lib = WriteLibCache[module]
-
-	if write_lib ~= nil then
-		return write_lib -- WriteLib module was previously loaded
-	end
+	if write_lib ~= nil then return write_lib end
 
 	local loaded_module = require(module)
-
-	local function_list = {} -- fn_id = {fn_name, fn}
-
-	for key, value in pairs(loaded_module) do
-		table.insert(function_list, {key, value})
+	if type(loaded_module) ~= "table" then
+		error(`[{script.Name}]: A "WriteLib" ModuleScript must return a table`)
 	end
 
-	table.sort(function_list, function(item1, item2)
-		return item1[1] < item2[1] -- Sort functions by their names - this creates a consistent indexing on server and client-side
+	local function_list = {}
+
+	for key, value in pairs(loaded_module) do
+		if type(key) ~= "string" then
+			error(`[{script.Name}]: "WriteLib" table keys must be strings`)
+		end
+
+		local fn, schema
+
+		if type(value) == "function" then
+			-- old format, still works
+			fn = value
+			schema = nil
+		elseif type(value) == "table" and type(value.Fn) == "function" then
+			-- new {Fn, Schema} format
+			fn = value.Fn
+			schema = value.Schema
+		else
+			error("[" .. script.Name .. "]: \"" .. key .. "\" must be a function or {{Fn, Schema}} table")
+		end
+
+		table.insert(function_list, {key, fn, schema})
+	end
+
+	table.sort(function_list, function(a, b)
+		return a[1] < b[1]
 	end)
 
-	write_lib = {} -- {["fn_name" | fn_id] = {Id = fn_id, fn = fn}, ...}
-
+	write_lib = {}
 	for fn_id, fn_entry in ipairs(function_list) do
-		local entry_table = {Name = fn_entry[1], Id = fn_id, fn = fn_entry[2]}
-		write_lib[fn_entry[1]] = entry_table
-		write_lib[fn_id] = entry_table
+		local entry = {Name = fn_entry[1], Id = fn_id, fn = fn_entry[2], schema = fn_entry[3]}
+		write_lib[fn_entry[1]] = entry
+		write_lib[fn_id] = entry
 	end
 
 	WriteLibCache[module] = write_lib
-
 	return write_lib
-
 end
 
 ----- Public -----
@@ -763,6 +779,29 @@ RemoteWrite.OnClientEvent:Connect(function(id: number, fn_id: number, ...)
 	ReplicationFlag = false
 	if success ~= true then
 		error(`[{script.Name}]: Error while updating replica:\n{replica:Identify()}\n` .. msg)
+	end
+end)
+
+RemoteWriteSchema.OnClientEvent:Connect(function(payload: buffer)
+	local replica_id = buffer.readu32(payload, 0)
+	local fn_id = buffer.readu8(payload, 4)
+
+	local replica = GetInternalReplica(replica_id)
+	local write_lib_entry = replica.write_lib[fn_id]
+
+	local args_table = Sera.Deserialize(write_lib_entry.schema, payload, 5)
+
+	ReplicationFlag = true
+	local success, msg = pcall(write_lib_entry.fn, replica, args_table)
+	ReplicationFlag = false
+
+	if success ~= true then
+		error(`[{script.Name}]: Error while updating replica:\n{replica:Identify()}\n` .. msg)
+	end
+
+	local listeners = replica.write_listeners[write_lib_entry.Name]
+	if listeners ~= nil then
+		listeners:Fire(args_table)
 	end
 end)
 
