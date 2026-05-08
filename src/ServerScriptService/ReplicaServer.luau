@@ -165,11 +165,9 @@ local function LoadWriteLib(module: ModuleScript)
 		local fn, schema
 
 		if type(value) == "function" then
-			-- old format, still works
 			fn = value
 			schema = nil
 		elseif type(value) == "table" and type(value.Fn) == "function" then
-			-- new {Fn, Schema} format
 			fn = value.Fn
 			schema = value.Schema
 		else
