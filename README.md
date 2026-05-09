@@ -1,6 +1,6 @@
 # ReplicaSera WriteLib
 
-this fork of replica adds serialised writelibs using sera
+this fork of replica adds serialised writelibs using the sera serdes library ([inspired from this post](https://devforum.roblox.com/t/replica-server-to-client-state-replication-module/3216980/179))
 
 ## original implementation:
 
