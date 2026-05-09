@@ -1,8 +1,32 @@
-# MAD STUDIO - Replica
+# ReplicaSera Compatability
 
-Replica is a Roblox server to client state replication solution which lets the developer subscribe certain players to certain states.
+this fork adds compatibility with sera and replica specifically for your writelib module.
 
-Individual states in the Replica module are called "replicas". Replicas can only be created and changed server-side, both server
-and client can connect cleanup tasks for the moment of replica destruction, state changes can trigger listeners on the client-side.
+original implementation:
 
-Forked to support the usage of Sera
+```lua
+WriteLib.AddMoney = function( replica, amount )
+    local NewAmount = math.max(0, replica.Data.Money + amount)
+    replica:Set({ "Money" }, NewAmount)
+    return NewAmount
+end
+
+```
+
+new implementatiion:
+
+```lua
+WriteLib.AddMoney = {
+	Schema = Sera.Schema({
+		Amount = Sera.Uint32,
+	}),
+	Fn = function( replica, args )
+		local NewAmount = math.max(0, replica.Data.Money + args.Amount)
+		replica:Set({ "Money" }, NewAmount)
+		return NewAmount
+	end,
+}
+
+```
+
+todo: add more stuff idk
