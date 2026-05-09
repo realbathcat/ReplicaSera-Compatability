@@ -36,4 +36,4 @@ WriteLib.AddMoney = {
 replica:Write("AddMoney", { Amount = amount })
 ```
 
-#todo: add more stuff idk
+# todo: add more stuff idk
